@@ -7,10 +7,10 @@ import {
   PRERENDER_MANIFEST,
   SERVER_DIRECTORY,
   SERVERLESS_DIRECTORY,
-} from 'next-server/constants'
+} from '../next-server/lib/constants'
 import loadConfig, {
   isTargetLikeServerless,
-} from 'next-server/dist/server/config'
+} from '../next-server/server/config'
 import nanoid from 'next/dist/compiled/nanoid/index.js'
 import path from 'path'
 import { promisify } from 'util'
@@ -64,7 +64,10 @@ export default async function build(dir: string, conf = null): Promise<void> {
   await verifyTypeScriptSetup(dir)
 
   let backgroundWork: (Promise<any> | undefined)[] = []
-  backgroundWork.push(recordVersion(), recordNextPlugins(path.resolve(dir)))
+  backgroundWork.push(
+    recordVersion({ cliCommand: 'build' }),
+    recordNextPlugins(path.resolve(dir))
+  )
 
   console.log('Creating an optimized production build ...')
   console.log()
@@ -91,11 +94,9 @@ export default async function build(dir: string, conf = null): Promise<void> {
 
   // needed for static exporting since we want to replace with HTML
   // files
-  const allPagePaths = [...pagePaths]
   const allStaticPages = new Set<string>()
   let allPageInfos = new Map<string, PageInfo>()
 
-  const allMappedPages = createPagesMapping(allPagePaths, config.pageExtensions)
   const mappedPages = createPagesMapping(pagePaths, config.pageExtensions)
   const entrypoints = createEntrypoints(mappedPages, target, buildId, config)
   const configs = await Promise.all([
@@ -199,7 +200,7 @@ export default async function build(dir: string, conf = null): Promise<void> {
     console.log(chalk.green('Compiled successfully.\n'))
     backgroundWork.push(
       recordBuildDuration({
-        numberOfPages: allPagePaths.length,
+        totalPageCount: pagePaths.length,
         durationInSeconds: webpackBuildEnd[0],
       })
     )
@@ -409,8 +410,9 @@ export default async function build(dir: string, conf = null): Promise<void> {
   backgroundWork.push(
     recordBuildOptimize({
       durationInSeconds: analysisEnd[0],
-      totalPageCount: allPagePaths.length,
-      staticOptimizedPages: staticPages.size,
+      totalPageCount: pagePaths.length,
+      staticPageCount: staticPages.size,
+      ssrPageCount: pagePaths.length - staticPages.size,
     })
   )
 
@@ -427,7 +429,7 @@ export default async function build(dir: string, conf = null): Promise<void> {
     allPageInfos.set(key, info)
   })
 
-  printTreeView(Object.keys(allMappedPages), allPageInfos, isLikeServerless)
+  printTreeView(Object.keys(mappedPages), allPageInfos, isLikeServerless)
 
   if (tracer) {
     const parsedResults = await tracer.profiler.stopProfiling()

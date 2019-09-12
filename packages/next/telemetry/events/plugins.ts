@@ -1,10 +1,10 @@
 import { record } from '../storage'
 import findUp from 'find-up'
 
-const EVENT_PLUGIN_PRESENT = 'NEXT_PLUGIN_PRESENT'
-type PluginPresentEventShape = {
-  pluginName: string
-  pluginVersion: string
+const EVENT_PLUGIN_PRESENT = 'NEXT_PACKAGE_DETECTED'
+type EventPackageDetected = {
+  packageName: string
+  packageVersion: string
 }
 
 const plugins = [
@@ -153,6 +153,10 @@ const plugins = [
   'amplify-next',
   'create-next-app',
   'neutron',
+  'react-intl',
+  'react-intl-universal',
+  '@lingui/react',
+  '@apollo/react-ssr',
 ]
 
 export async function recordNextPlugins(dir: string) {
@@ -177,9 +181,9 @@ export async function recordNextPlugins(dir: string) {
       }[]).map(({ pluginName, pluginVersion }) => ({
         eventName: EVENT_PLUGIN_PRESENT,
         payload: {
-          pluginName,
-          pluginVersion,
-        } as PluginPresentEventShape,
+          packageName: pluginName,
+          packageVersion: pluginVersion,
+        } as EventPackageDetected,
       }))
     )
   } catch (_) {}

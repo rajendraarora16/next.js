@@ -1,18 +1,18 @@
 /* eslint-disable */
 import PropTypes from 'prop-types'
 import React, { Component } from 'react'
-import { cleanAmpPath } from 'next-server/dist/server/utils'
+import { cleanAmpPath } from '../next-server/server/utils'
 import {
   DocumentContext,
   DocumentInitialProps,
   DocumentProps,
-} from 'next-server/dist/lib/utils'
+} from '../next-server/lib/utils'
 import { htmlEscapeJsonString } from '../server/htmlescape'
 import flush from 'styled-jsx/server'
 import {
   CLIENT_STATIC_FILES_RUNTIME_AMP,
   CLIENT_STATIC_FILES_RUNTIME_WEBPACK,
-} from 'next-server/constants'
+} from '../next-server/lib/constants'
 
 export { DocumentContext, DocumentInitialProps, DocumentProps }
 
@@ -480,7 +480,7 @@ export class NextScript extends Component<OriginProps> {
     '!function(){var e=document,t=e.createElement("script");if(!("noModule"in t)&&"onbeforeload"in t){var n=!1;e.addEventListener("beforeload",function(e){if(e.target===t)n=!0;else if(!e.target.hasAttribute("nomodule")||!n)return;e.preventDefault()},!0),t.type="module",t.src=".",e.head.appendChild(t),t.remove()}}();'
 
   getDynamicChunks() {
-    const { dynamicImports, assetPrefix } = this.context._documentProps
+    const { dynamicImports, assetPrefix, files } = this.context._documentProps
     const { _devOnlyInvalidateCacheQueryString } = this.context
 
     return dedupe(dynamicImports).map((bundle: any) => {
@@ -490,6 +490,8 @@ export class NextScript extends Component<OriginProps> {
           ? { type: 'module' }
           : { noModule: true }
       }
+
+      if (files.includes(bundle.file)) return null
 
       return (
         <script
