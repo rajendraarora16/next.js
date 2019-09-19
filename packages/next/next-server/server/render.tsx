@@ -130,7 +130,9 @@ type RenderOpts = {
   runtimeConfig?: { [key: string]: any }
   dangerousAsPath: string
   assetPrefix?: string
+  hasCssMode: boolean
   err?: Error | null
+  autoExport?: boolean
   nextExport?: boolean
   skeleton?: boolean
   dev?: boolean
@@ -163,9 +165,11 @@ function renderDocument(
     assetPrefix,
     runtimeConfig,
     nextExport,
+    autoExport,
     skeleton,
     dynamicImportsIds,
     dangerousAsPath,
+    hasCssMode,
     err,
     dev,
     ampPath,
@@ -207,6 +211,7 @@ function renderDocument(
             assetPrefix: assetPrefix === '' ? undefined : assetPrefix, // send assetPrefix to the client side when configured, otherwise don't sent in the resulting HTML
             runtimeConfig, // runtimeConfig if provided, otherwise don't sent in the resulting HTML
             nextExport, // If this is a page exported by `next export`
+            autoExport, // If this is an auto exported page
             skeleton, // If this is a skeleton page for experimentalPrerender
             dynamicIds:
               dynamicImportsIds.length === 0 ? undefined : dynamicImportsIds,
@@ -216,6 +221,8 @@ function renderDocument(
           canonicalBase={canonicalBase}
           ampPath={ampPath}
           inAmpMode={inAmpMode}
+          isDevelopment={!!dev}
+          hasCssMode={hasCssMode}
           hybridAmp={hybridAmp}
           staticMarkup={staticMarkup}
           devFiles={devFiles}
@@ -255,8 +262,20 @@ export async function renderToHTML(
   } = renderOpts
 
   await Loadable.preloadAll() // Make sure all dynamic imports are loaded
-  let isStaticPage = pageConfig.experimentalPrerender === true
-  let isSkeleton = false
+
+  const defaultAppGetInitialProps =
+    App.getInitialProps === (App as any).origGetInitialProps
+
+  let isAutoExport =
+    typeof (Component as any).getInitialProps !== 'function' &&
+    defaultAppGetInitialProps
+
+  let isPrerender = pageConfig.experimentalPrerender === true
+  const isStaticPage = isPrerender || isAutoExport
+  // TODO: revisit `?_nextPreviewSkeleton=(truthy)`
+  const isSkeleton = isPrerender && !!query._nextPreviewSkeleton
+  // remove from query so it doesn't end up in document
+  delete query._nextPreviewSkeleton
 
   if (dev) {
     const { isValidElementType } = require('react-is')
@@ -278,11 +297,6 @@ export async function renderToHTML(
       )
     }
 
-    isStaticPage = typeof (Component as any).getInitialProps !== 'function'
-    const defaultAppGetInitialProps =
-      App.getInitialProps === (App as any).origGetInitialProps
-    isStaticPage = isStaticPage && defaultAppGetInitialProps
-
     if (isStaticPage) {
       // remove query values except ones that will be set during export
       query = {
@@ -292,12 +306,8 @@ export async function renderToHTML(
       renderOpts.nextExport = true
     }
   }
-  // might want to change previewing of skeleton from `?_nextPreviewSkeleton=(truthy)`
-  isSkeleton =
-    pageConfig.experimentalPrerender === true && !!query._nextPreviewSkeleton
-  // remove from query so it doesn't end up in document
-  delete query._nextPreviewSkeleton
   if (isSkeleton) renderOpts.nextExport = true
+  if (isAutoExport) renderOpts.autoExport = true
 
   // @ts-ignore url will always be set
   const asPath: string = req.url

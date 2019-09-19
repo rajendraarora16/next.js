@@ -1,5 +1,6 @@
 import crypto from 'crypto'
 import ForkTsCheckerWebpackPlugin from 'fork-ts-checker-webpack-plugin'
+import MiniCssExtractPlugin from 'mini-css-extract-plugin'
 import path from 'path'
 // @ts-ignore: Currently missing types
 import PnpWebpackPlugin from 'pnp-webpack-plugin'
@@ -20,10 +21,12 @@ import {
   SERVER_DIRECTORY,
   SERVERLESS_DIRECTORY,
 } from '../next-server/lib/constants'
+import { findPageFile } from '../server/lib/find-page-file'
 import { WebpackEntrypoints } from './entries'
 import BuildManifestPlugin from './webpack/plugins/build-manifest-plugin'
 import { ChunkGraphPlugin } from './webpack/plugins/chunk-graph-plugin'
 import ChunkNamesPlugin from './webpack/plugins/chunk-names-plugin'
+import { CssMinimizerPlugin } from './webpack/plugins/css-minimizer-plugin'
 import { importAutoDllPlugin } from './webpack/plugins/dll-import'
 import { DropClientPage } from './webpack/plugins/next-drop-client-page-plugin'
 import NextEsmPlugin from './webpack/plugins/next-esm-plugin'
@@ -291,6 +294,17 @@ export default async function getBaseWebpackConfig(
       ? 'anonymous'
       : config.crossOrigin
 
+  let customAppFile: string | null = config.experimental.css
+    ? await findPageFile(
+        path.join(dir, 'pages'),
+        '/_app',
+        config.pageExtensions
+      )
+    : null
+  if (customAppFile) {
+    customAppFile = path.resolve(path.join(dir, 'pages', customAppFile))
+  }
+
   let webpackConfig: webpack.Configuration = {
     devtool,
     mode: webpackMode,
@@ -314,10 +328,17 @@ export default async function getBaseWebpackConfig(
               return callback()
             }
 
+            // Resolve the import with the webpack provided context, this
+            // ensures we're resolving the correct version when multiple
+            // exist.
             let res
             try {
-              res = resolveRequest(request, context)
+              res = resolveRequest(request, `${context}/`)
             } catch (err) {
+              // This is a special case for the Next.js data experiment. This
+              // will be removed in the future.
+              // We're telling webpack to externalize a package that doesn't
+              // exist because we know it won't ever be used at runtime.
               if (
                 request === 'react-ssr-prepass' &&
                 !config.experimental.ampBindInitData
@@ -329,10 +350,31 @@ export default async function getBaseWebpackConfig(
                 }
               }
 
+              // If the request cannot be resolved, we need to tell webpack to
+              // "bundle" it so that webpack shows an error (that it cannot be
+              // resolved).
               return callback()
             }
 
+            // Same as above, if the request cannot be resolved we need to have
+            // webpack "bundle" it so it surfaces the not found error.
             if (!res) {
+              return callback()
+            }
+
+            // Bundled Node.js code is relocated without its node_modules tree.
+            // This means we need to make sure its request resolves to the same
+            // package that'll be available at runtime. If it's not identical,
+            // we need to bundle the code (even if it _should_ be external).
+            let baseRes
+            try {
+              baseRes = resolveRequest(request, `${dir}/`)
+            } catch (err) {}
+
+            // Same as above: if the package, when required from the root,
+            // would be different from what the real resolution would use, we
+            // cannot externalize it.
+            if (baseRes !== res) {
               return callback()
             }
 
@@ -354,10 +396,13 @@ export default async function getBaseWebpackConfig(
               return callback()
             }
 
+            // Anything else that is standard JavaScript within `node_modules`
+            // can be externalized.
             if (res.match(/node_modules[/\\].*\.js$/)) {
               return callback(undefined, `commonjs ${request}`)
             }
 
+            // Default behavior: bundle the code!
             callback()
           },
         ]
@@ -388,11 +433,26 @@ export default async function getBaseWebpackConfig(
         : { name: CLIENT_STATIC_FILES_RUNTIME_WEBPACK },
       minimize: !(dev || isServer),
       minimizer: [
+        // Minify JavaScript
         new TerserPlugin({
           ...terserPluginConfig,
           terserOptions,
         }),
-      ],
+        // Minify CSS
+        config.experimental.css &&
+          new CssMinimizerPlugin({
+            postcssOptions: {
+              map: {
+                // `inline: false` generates the source map in a separate file.
+                // Otherwise, the CSS file is needlessly large.
+                inline: false,
+                // `annotation: false` skips appending the `sourceMappingURL`
+                // to the end of the CSS file. Webpack already handles this.
+                annotation: false,
+              },
+            },
+          }),
+      ].filter(Boolean),
     },
     recordsPath: path.join(outputPath, 'records.json'),
     context: dir,
@@ -487,6 +547,85 @@ export default async function getBaseWebpackConfig(
           },
           use: defaultLoaders.babel,
         },
+        config.experimental.css &&
+          // Support CSS imports
+          ({
+            test: /\.css$/,
+            issuer: { include: [customAppFile].filter(Boolean) },
+            use: isServer
+              ? // Global CSS is ignored on the server because it's only needed
+                // on the client-side.
+                require.resolve('ignore-loader')
+              : [
+                  // During development we load CSS via JavaScript so we can
+                  // hot reload it without refreshing the page.
+                  dev && {
+                    loader: require.resolve('style-loader'),
+                    options: {
+                      // By default, style-loader injects CSS into the bottom
+                      // of <head>. This causes ordering problems between dev
+                      // and prod. To fix this, we render a <noscript> tag for
+                      // the styles to be placed within. These styles will be
+                      // applied _before_ <style jsx global>.
+                      insert: `#__next_css__DO_NOT_USE__`,
+                    },
+                  },
+                  // When building for production we extract CSS into
+                  // separate files.
+                  !dev && {
+                    loader: MiniCssExtractPlugin.loader,
+                    options: {},
+                  },
+
+                  // Resolve CSS `@import`s and `url()`s
+                  {
+                    loader: require.resolve('css-loader'),
+                    options: { importLoaders: 1, sourceMap: !dev },
+                  },
+
+                  // Compile CSS
+                  {
+                    loader: require.resolve('postcss-loader'),
+                    options: {
+                      ident: 'postcss',
+                      plugins: () => [
+                        // Make Flexbox behave like the spec cross-browser.
+                        require('postcss-flexbugs-fixes'),
+                        // Run Autoprefixer and compile new CSS features.
+                        require('postcss-preset-env')({
+                          autoprefixer: {
+                            // Disable legacy flexbox support
+                            flexbox: 'no-2009',
+                          },
+                          // Enable CSS features that have shipped to the
+                          // web platform, i.e. in 2+ browsers unflagged.
+                          stage: 3,
+                        }),
+                      ],
+                      sourceMap: !dev,
+                    },
+                  },
+                ].filter(Boolean),
+            // A global CSS import always has side effects. Webpack will tree
+            // shake the CSS without this option if the issuer claims to have
+            // no side-effects.
+            // See https://github.com/webpack/webpack/issues/6571
+            sideEffects: true,
+          } as webpack.RuleSetRule),
+        config.experimental.css &&
+          ({
+            loader: require.resolve('file-loader'),
+            issuer: {
+              // file-loader is only used for CSS files, e.g. url() for a SVG
+              // or font files
+              test: /\.css$/,
+            },
+            // Exclude extensions that webpack handles by default
+            exclude: [/\.(js|mjs|jsx|ts|tsx)$/, /\.html$/, /\.json$/],
+            options: {
+              name: 'static/media/[name].[hash].[ext]',
+            },
+          } as webpack.RuleSetRule),
       ].filter(Boolean),
     },
     plugins: [
@@ -520,9 +659,18 @@ export default async function getBaseWebpackConfig(
         'process.env.__NEXT_EXPORT_TRAILING_SLASH': JSON.stringify(
           config.exportTrailingSlash
         ),
-        'process.env.__NEXT_MODERN_BUILD': config.experimental.modern && !dev,
-        'process.env.__NEXT_GRANULAR_CHUNKS':
-          config.experimental.granularChunks && !dev,
+        'process.env.__NEXT_MODERN_BUILD': JSON.stringify(
+          config.experimental.modern && !dev
+        ),
+        'process.env.__NEXT_GRANULAR_CHUNKS': JSON.stringify(
+          config.experimental.granularChunks && !dev
+        ),
+        'process.env.__NEXT_BUILD_INDICATOR': JSON.stringify(
+          config.devIndicators.buildActivity
+        ),
+        'process.env.__NEXT_PRERENDER_INDICATOR': JSON.stringify(
+          config.devIndicators.autoPrerender
+        ),
         ...(isServer
           ? {
               // Fix bad-actors in the npm ecosystem (e.g. `node-formidable`)
@@ -611,6 +759,14 @@ export default async function getBaseWebpackConfig(
           buildId,
           clientManifest: config.experimental.granularChunks,
           modern: config.experimental.modern,
+        }),
+      // Extract CSS as CSS file(s) in the client-side production bundle.
+      config.experimental.css &&
+        !isServer &&
+        !dev &&
+        new MiniCssExtractPlugin({
+          filename: 'static/css/[contenthash].css',
+          chunkFilename: 'static/css/[contenthash].chunk.css',
         }),
       tracer &&
         new ProfilingPlugin({

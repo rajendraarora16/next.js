@@ -65,6 +65,7 @@ export type NEXT_DATA = {
   assetPrefix?: string
   runtimeConfig?: { [key: string]: any }
   nextExport?: boolean
+  autoExport?: boolean
   skeleton?: boolean
   dynamicIds?: string[]
   err?: Error & { statusCode?: number }
@@ -139,6 +140,8 @@ export type DocumentProps = DocumentInitialProps & {
   inAmpMode: boolean
   hybridAmp: boolean
   staticMarkup: boolean
+  isDevelopment: boolean
+  hasCssMode: boolean
   devFiles: string[]
   files: string[]
   dynamicImports: ManifestItem[]

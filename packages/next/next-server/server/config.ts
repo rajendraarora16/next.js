@@ -21,6 +21,10 @@ const defaultConfig: { [key: string]: any } = {
   target: 'server',
   poweredByHeader: true,
   compress: true,
+  devIndicators: {
+    buildActivity: true,
+    autoPrerender: true,
+  },
   onDemandEntries: {
     maxInactiveAge: 60 * 1000,
     pagesBufferLength: 2,
@@ -36,6 +40,7 @@ const defaultConfig: { [key: string]: any } = {
       (Number(process.env.CIRCLE_NODE_TOTAL) ||
         (os.cpus() || { length: 1 }).length) - 1
     ),
+    css: false,
     documentMiddleware: false,
     granularChunks: false,
     modern: false,
