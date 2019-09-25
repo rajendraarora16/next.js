@@ -50,20 +50,22 @@ const escapePathVariables = (value: any) => {
 export default async function getBaseWebpackConfig(
   dir: string,
   {
-    dev = false,
-    isServer = false,
     buildId,
     config,
+    dev = false,
+    isServer = false,
+    pagesDir,
+    tracer,
     target = 'server',
     entrypoints,
-    tracer,
   }: {
-    tracer?: any
-    dev?: boolean
-    isServer?: boolean
     buildId: string
     config: any
+    dev?: boolean
+    isServer?: boolean
+    pagesDir: string
     target?: string
+    tracer?: any
     entrypoints: WebpackEntrypoints
   }
 ): Promise<webpack.Configuration> {
@@ -75,6 +77,7 @@ export default async function getBaseWebpackConfig(
         isServer,
         hasModern: !!config.experimental.modern,
         distDir,
+        pagesDir,
         cwd: dir,
         cache: true,
       },
@@ -154,7 +157,7 @@ export default async function getBaseWebpackConfig(
       'next/config': 'next/dist/next-server/lib/runtime-config.js',
       'next/dynamic': 'next/dist/next-server/lib/dynamic.js',
       next: NEXT_PROJECT_ROOT,
-      [PAGES_DIR_ALIAS]: path.join(dir, 'pages'),
+      [PAGES_DIR_ALIAS]: pagesDir,
       [DOT_NEXT_ALIAS]: distDir,
     },
     mainFields: isServer ? ['main', 'module'] : ['browser', 'module', 'main'],
@@ -786,17 +789,19 @@ export default async function getBaseWebpackConfig(
         }),
       !isServer &&
         useTypeScript &&
-        new ForkTsCheckerWebpackPlugin({
-          typescript: typeScriptPath,
-          async: dev,
-          useTypescriptIncrementalApi: true,
-          checkSyntacticErrors: true,
-          tsconfig: tsConfigPath,
-          reportFiles: ['**', '!**/__tests__/**', '!**/?(*.)(spec|test).*'],
-          compilerOptions: { isolatedModules: true, noEmit: true },
-          silent: true,
-          formatter: 'codeframe',
-        }),
+        new ForkTsCheckerWebpackPlugin(
+          PnpWebpackPlugin.forkTsCheckerOptions({
+            typescript: typeScriptPath,
+            async: dev,
+            useTypescriptIncrementalApi: true,
+            checkSyntacticErrors: true,
+            tsconfig: tsConfigPath,
+            reportFiles: ['**', '!**/__tests__/**', '!**/?(*.)(spec|test).*'],
+            compilerOptions: { isolatedModules: true, noEmit: true },
+            silent: true,
+            formatter: 'codeframe',
+          })
+        ),
       config.experimental.modern &&
         !isServer &&
         !dev &&
