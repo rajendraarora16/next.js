@@ -31,6 +31,7 @@ import { isInAmpMode } from '../lib/amp'
 import { PageConfig } from 'next/types'
 import { isDynamicRoute } from '../lib/router/utils/is-dynamic'
 import { SPR_GET_INITIAL_PROPS_CONFLICT } from '../../lib/constants'
+import { AMP_RENDER_TARGET } from '../lib/constants'
 
 export type ManifestItem = {
   id: number | string
@@ -157,7 +158,7 @@ type RenderOpts = {
     props: any
     revalidate: number | false
   }
-  unstable_getStaticParams?: () => void
+  unstable_getStaticPaths?: () => void
 }
 
 function renderDocument(
@@ -278,7 +279,7 @@ export async function renderToHTML(
     reactLoadableManifest,
     ErrorDebug,
     unstable_getStaticProps,
-    unstable_getStaticParams,
+    unstable_getStaticPaths,
   } = renderOpts
 
   const callMiddleware = async (method: string, args: any[], props = false) => {
@@ -320,9 +321,9 @@ export async function renderToHTML(
     throw new Error(SPR_GET_INITIAL_PROPS_CONFLICT + ` ${pathname}`)
   }
 
-  if (!!unstable_getStaticParams && !isSpr) {
+  if (!!unstable_getStaticPaths && !isSpr) {
     throw new Error(
-      `unstable_getStaticParams was added without a unstable_getStaticProps in ${pathname}. Without unstable_getStaticProps, unstable_getStaticParams does nothing`
+      `unstable_getStaticPaths was added without a unstable_getStaticProps in ${pathname}. Without unstable_getStaticProps, unstable_getStaticPaths does nothing`
     )
   }
 
@@ -431,9 +432,8 @@ export async function renderToHTML(
       if (invalidKeys.length) {
         throw new Error(
           `Additional keys were returned from \`getStaticProps\`. Properties intended for your component must be nested under the \`props\` key, e.g.:` +
-            `\n\n\treturn { props: { title: 'My Title', content: '...' }` +
-            `\n\nKeys that need moved: ${invalidKeys.join(', ')}.
-        `
+            `\n\n\treturn { props: { title: 'My Title', content: '...' } }` +
+            `\n\nKeys that need moved: ${invalidKeys.join(', ')}.`
         )
       }
 
@@ -648,11 +648,13 @@ export async function renderToHTML(
   })
 
   if (inAmpMode && html) {
-    // use replace to allow rendering directly to body in AMP mode
-    html = html.replace(
-      '__NEXT_AMP_RENDER_TARGET__',
-      `<!-- __NEXT_DATA__ -->${docProps.html}`
-    )
+    // inject HTML to AMP_RENDER_TARGET to allow rendering
+    // directly to body in AMP mode
+    const ampRenderIndex = html.indexOf(AMP_RENDER_TARGET)
+    html =
+      html.substring(0, ampRenderIndex) +
+      `<!-- __NEXT_DATA__ -->${docProps.html}` +
+      html.substring(ampRenderIndex + AMP_RENDER_TARGET.length)
     html = await optimizeAmp(html)
 
     if (renderOpts.ampValidator) {
