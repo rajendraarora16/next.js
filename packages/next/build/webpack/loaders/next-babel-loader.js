@@ -1,10 +1,10 @@
-import hash from 'string-hash'
-import { join, basename } from 'path'
 import babelLoader from 'babel-loader'
+import { basename, join } from 'path'
+import hash from 'string-hash'
 
 // increment 'e' to invalidate cache
 // eslint-disable-next-line no-useless-concat
-const cacheKey = 'babel-cache-' + 'e' + '-'
+const cacheKey = 'babel-cache-' + 'g' + '-'
 const nextBabelPreset = require('../../babel/preset')
 
 const getModernOptions = (babelOptions = {}) => {
@@ -186,6 +186,15 @@ module.exports = babelLoader.custom(babel => {
         },
         'next-js-transform-define-instance',
       ])
+
+      if (isPageFile) {
+        if (!isServer) {
+          options.plugins.push([
+            require.resolve('../../babel/plugins/next-ssg-transform'),
+            {},
+          ])
+        }
+      }
 
       // As next-server/lib has stateful modules we have to transpile commonjs
       options.overrides = [
