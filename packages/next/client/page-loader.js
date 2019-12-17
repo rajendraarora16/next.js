@@ -1,9 +1,13 @@
 /* global document, window */
 import mitt from '../next-server/lib/mitt'
 
+const prefetchOrPreload = process.env.__NEXT_PREFETCH_PRELOAD
+  ? 'prefetch'
+  : 'preload'
+
 function supportsPreload(el) {
   try {
-    return el.relList.supports('preload')
+    return el.relList.supports(prefetchOrPreload)
   } catch {
     return false
   }
@@ -11,12 +15,20 @@ function supportsPreload(el) {
 
 const hasPreload = supportsPreload(document.createElement('link'))
 
-function preloadScript(url) {
+function preloadLink(url, resourceType) {
   const link = document.createElement('link')
-  link.rel = 'preload'
+  link.rel = prefetchOrPreload
   link.crossOrigin = process.crossOrigin
   link.href = url
-  link.as = 'script'
+  link.as = resourceType
+  document.head.appendChild(link)
+}
+
+function loadStyle(url) {
+  const link = document.createElement('link')
+  link.rel = 'stylesheet'
+  link.crossOrigin = process.crossOrigin
+  link.href = url
   document.head.appendChild(link)
 }
 
@@ -104,6 +116,12 @@ export default class PageLoader {
                 !document.querySelector(`script[src^="${d}"]`)
               ) {
                 this.loadScript(d, route, false)
+              }
+              if (
+                /\.css$/.test(d) &&
+                !document.querySelector(`link[rel=stylesheet][href^="${d}"]`)
+              ) {
+                loadStyle(d) // FIXME: handle failure
               }
             })
             this.loadRoute(route)
@@ -203,7 +221,7 @@ export default class PageLoader {
     // its own deduping mechanism.
     if (
       document.querySelector(
-        `link[rel="preload"][href^="${url}"], script[data-next-page="${route}"]`
+        `link[rel="${prefetchOrPreload}"][href^="${url}"], script[data-next-page="${route}"]`
       )
     ) {
       return
@@ -228,7 +246,7 @@ export default class PageLoader {
     // If not fall back to loading script tags before the page is loaded
     // https://caniuse.com/#feat=link-rel-preload
     if (hasPreload) {
-      preloadScript(url)
+      preloadLink(url, url.match(/\.css$/) ? 'style' : 'script')
       return
     }
 

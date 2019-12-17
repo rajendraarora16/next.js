@@ -99,15 +99,12 @@ const nextServerlessLoader: loader.Loader = function() {
     const Component = ComponentInfo.default
     export default Component
     export const unstable_getStaticProps = ComponentInfo['unstable_getStaticProp' + 's']
+    export const unstable_getStaticParams = ComponentInfo['unstable_getStaticParam' + 's']
+    export const unstable_getStaticPaths = ComponentInfo['unstable_getStaticPath' + 's']
 
-    ${
-      isDynamicRoute(page)
-        ? "export const unstable_getStaticPaths = ComponentInfo['unstable_getStaticPath' + 's']"
-        : 'export const unstable_getStaticPaths = undefined'
-    }
     export const config = ComponentInfo['confi' + 'g'] || {}
     export const _app = App
-    export async function renderReqToHTML(req, res, fromExport) {
+    export async function renderReqToHTML(req, res, fromExport, _renderOpts, _params) {
       const options = {
         App,
         Document,
@@ -120,6 +117,7 @@ const nextServerlessLoader: loader.Loader = function() {
         assetPrefix: "${assetPrefix}",
         ampBindInitData: ${ampBindInitData === true ||
           ampBindInitData === 'true'},
+        ..._renderOpts
       }
       let sprData = false
 
@@ -179,7 +177,7 @@ const nextServerlessLoader: loader.Loader = function() {
           `
             : `const nowParams = null;`
         }
-        let result = await renderToHTML(req, res, "${page}", Object.assign({}, unstable_getStaticProps ? {} : parsedUrl.query, nowParams ? nowParams : params), renderOpts)
+        let result = await renderToHTML(req, res, "${page}", Object.assign({}, unstable_getStaticProps ? {} : parsedUrl.query, nowParams ? nowParams : params, _params), renderOpts)
 
         if (sprData && !fromExport) {
           const payload = JSON.stringify(renderOpts.sprData)
