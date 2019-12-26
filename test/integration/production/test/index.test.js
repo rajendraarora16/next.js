@@ -442,17 +442,17 @@ describe('Production Usage', () => {
     })
 
     if (browserName === 'chrome') {
-      it('should add preload tags when Link prefetch prop is used', async () => {
+      it('should add prefetch tags when Link prefetch prop is used', async () => {
         const browser = await webdriver(appPort, '/prefetch')
         await waitFor(2000)
-        const elements = await browser.elementsByCss('link[rel=preload]')
+        const elements = await browser.elementsByCss('link[rel=prefetch]')
 
-        expect(elements.length).toBe(9)
+        expect(elements.length).toBe(4)
         await Promise.all(
           elements.map(async element => {
             const rel = await element.getAttribute('rel')
             const as = await element.getAttribute('as')
-            expect(rel).toBe('preload')
+            expect(rel).toBe('prefetch')
             expect(as).toBe('script')
           })
         )
@@ -461,9 +461,9 @@ describe('Production Usage', () => {
 
       // This is a workaround to fix https://github.com/zeit/next.js/issues/5860
       // TODO: remove this workaround when https://bugs.webkit.org/show_bug.cgi?id=187726 is fixed.
-      it('It does not add a timestamp to link tags with preload attribute', async () => {
+      it('It does not add a timestamp to link tags with prefetch attribute', async () => {
         const browser = await webdriver(appPort, '/prefetch')
-        const links = await browser.elementsByCss('link[rel=preload]')
+        const links = await browser.elementsByCss('link[rel=prefetch]')
         await Promise.all(
           links.map(async element => {
             const href = await element.getAttribute('href')

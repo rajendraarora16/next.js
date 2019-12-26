@@ -23,6 +23,7 @@ jasmine.DEFAULT_TIMEOUT_INTERVAL = 1000 * 60 * 2
 let appDir = join(__dirname, '..')
 const nextConfigPath = join(appDir, 'next.config.js')
 let nextConfigContent
+let buildId
 let stdout = ''
 let appPort
 let app
@@ -152,11 +153,50 @@ const runTests = (isDev = false) => {
     expect(await getBrowserBodyText(browser)).toMatch(/Hello again/)
   })
 
+  it('should match a page after a rewrite', async () => {
+    const html = await renderViaHTTP(appPort, '/to-hello')
+    expect(html).toContain('Hello')
+  })
+
+  it('should match dynamic route after rewrite', async () => {
+    const html = await renderViaHTTP(appPort, '/blog/post-1')
+    expect(html).toMatch(/post:.*?post-2/)
+  })
+
+  it('should match public file after rewrite', async () => {
+    const data = await renderViaHTTP(appPort, '/blog/data.json')
+    expect(JSON.parse(data)).toEqual({ hello: 'world' })
+  })
+
+  it('should match /_next file after rewrite', async () => {
+    await renderViaHTTP(appPort, '/hello')
+    const data = await renderViaHTTP(
+      appPort,
+      `/hidden/_next/static/${buildId}/pages/hello.js`
+    )
+    expect(data).toContain('Hello')
+    expect(data).toContain('createElement')
+  })
+
+  it('should allow redirecting to external resource', async () => {
+    const res = await fetchViaHTTP(appPort, '/to-external', undefined, {
+      redirect: 'manual',
+    })
+    const location = res.headers.get('location')
+    expect(res.status).toBe(307)
+    expect(location).toBe('https://google.com/')
+  })
+
   if (!isDev) {
     it('should output routes-manifest successfully', async () => {
       const manifest = await fs.readJSON(
         join(appDir, '.next/routes-manifest.json')
       )
+
+      for (const route of manifest.dynamicRoutes) {
+        route.regex = normalizeRegEx(route.regex)
+      }
+
       expect(manifest).toEqual({
         version: 1,
         redirects: [
@@ -237,6 +277,13 @@ const runTests = (isDev = false) => {
             regex: normalizeRegEx('^\\/redir-chain3$'),
             regexKeys: [],
           },
+          {
+            destination: 'https://google.com',
+            regex: normalizeRegEx('^\\/to-external$'),
+            regexKeys: [],
+            source: '/to-external',
+            statusCode: 307,
+          },
         ],
         rewrites: [
           {
@@ -270,6 +317,18 @@ const runTests = (isDev = false) => {
             regexKeys: [],
           },
           {
+            destination: '/hello',
+            regex: normalizeRegEx('^\\/to-hello$'),
+            regexKeys: [],
+            source: '/to-hello',
+          },
+          {
+            destination: '/blog/post-2',
+            regex: normalizeRegEx('^\\/blog\\/post-1$'),
+            regexKeys: [],
+            source: '/blog/post-1',
+          },
+          {
             source: '/test/:path',
             destination: '/:path',
             regex: normalizeRegEx('^\\/test(?:\\/([^\\/]+?))$'),
@@ -289,8 +348,21 @@ const runTests = (isDev = false) => {
             regex: normalizeRegEx('^\\/params(?:\\/([^\\/]+?))$'),
             regexKeys: ['something'],
           },
+          {
+            destination: '/_next/:path*',
+            regex: normalizeRegEx(
+              '^\\/hidden\\/_next(?:\\/((?:[^\\/]+?)(?:\\/(?:[^\\/]+?))*))?$'
+            ),
+            regexKeys: ['path'],
+            source: '/hidden/_next/:path*',
+          },
         ],
-        dynamicRoutes: [],
+        dynamicRoutes: [
+          {
+            page: '/blog/[post]',
+            regex: normalizeRegEx('^\\/blog\\/([^/]+?)(?:\\/)?$'),
+          },
+        ],
       })
     })
 
@@ -305,7 +377,7 @@ const runTests = (isDev = false) => {
 
       for (const route of [...manifest.redirects, ...manifest.rewrites]) {
         expect(cleanStdout).toMatch(
-          new RegExp(`${route.source}.*?${route.destination}`)
+          new RegExp(`${route}.*?${route.destination}`)
         )
       }
     })
@@ -317,6 +389,7 @@ describe('Custom routes', () => {
     beforeAll(async () => {
       appPort = await findPort()
       app = await launchApp(appDir, appPort)
+      buildId = 'development'
     })
     afterAll(() => killApp(app))
     runTests(true)
@@ -330,6 +403,7 @@ describe('Custom routes', () => {
       stdout = buildStdout
       appPort = await findPort()
       app = await nextStart(appDir, appPort)
+      buildId = await fs.readFile(join(appDir, '.next/BUILD_ID'), 'utf8')
     })
     afterAll(() => killApp(app))
     runTests()
@@ -353,6 +427,7 @@ describe('Custom routes', () => {
           stdout += msg
         },
       })
+      buildId = await fs.readFile(join(appDir, '.next/BUILD_ID'), 'utf8')
     })
     afterAll(async () => {
       await killApp(app)
