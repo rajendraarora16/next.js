@@ -2,8 +2,7 @@ import Link from 'next/link'
 import fs from 'fs'
 import findUp from 'find-up'
 
-// eslint-disable-next-line camelcase
-export async function unstable_getStaticProps() {
+export async function getStaticProps() {
   const text = fs
     .readFileSync(
       findUp.sync('world.txt', {
@@ -26,7 +25,7 @@ export async function unstable_getStaticProps() {
 export default ({ world, time }) => (
   <>
     <p>hello {world}</p>
-    <span>time: {time}</span>
+    <span id="anotherTime">time: {time}</span>
     <Link href="/">
       <a id="home">to home</a>
     </Link>

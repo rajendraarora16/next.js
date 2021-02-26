@@ -1,6 +1,4 @@
-import React from 'react'
 import dynamic from 'next/dynamic'
-import 'react-quill/dist/quill.snow.css'
 
 const QuillNoSSRWrapper = dynamic(import('react-quill'), {
   ssr: false,
@@ -47,6 +45,6 @@ const formats = [
   'video',
 ]
 
-export default () => (
-  <QuillNoSSRWrapper modules={modules} formats={formats} theme="snow" />
-)
+export default function Home() {
+  return <QuillNoSSRWrapper modules={modules} formats={formats} theme="snow" />
+}

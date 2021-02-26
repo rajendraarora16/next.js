@@ -1,5 +1,5 @@
 /* eslint-env jest */
-/* global jasmine */
+
 import webdriver from 'next-webdriver'
 import { join } from 'path'
 import {
@@ -7,14 +7,13 @@ import {
   findPort,
   launchApp,
   killApp,
-  waitFor,
   runNextCommand,
   nextServer,
   startApp,
   stopApp,
 } from 'next-test-utils'
 
-jasmine.DEFAULT_TIMEOUT_INTERVAL = 1000 * 60 * 5
+jest.setTimeout(1000 * 60 * 5)
 
 let app
 let appPort
@@ -29,7 +28,6 @@ function runTests() {
 
   it('should render dynamic server rendered values on client mount', async () => {
     const browser = await webdriver(appPort, '/')
-    await waitFor(5000)
     const text = await browser.elementByCss('#first-render').text()
 
     // Failure case is 'Index<!-- -->3<!-- --><!-- -->'

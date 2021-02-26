@@ -1,70 +1,67 @@
-import {
-  BUILD_MANIFEST,
-  CLIENT_STATIC_FILES_PATH,
-  REACT_LOADABLE_MANIFEST,
-  SERVER_DIRECTORY,
-} from '../lib/constants'
+import { BUILD_MANIFEST, REACT_LOADABLE_MANIFEST } from '../lib/constants'
 import { join } from 'path'
-import { PageConfig } from '../../types'
 import { requirePage } from './require'
+import { BuildManifest } from './get-page-files'
+import { AppType, DocumentType } from '../lib/utils'
+import {
+  PageConfig,
+  GetStaticPaths,
+  GetServerSideProps,
+  GetStaticProps,
+} from 'next/types'
 
 export function interopDefault(mod: any) {
   return mod.default || mod
 }
 
+export type ManifestItem = {
+  id: number | string
+  name: string
+  file: string
+}
+
+type ReactLoadableManifest = { [moduleId: string]: ManifestItem[] }
+
 export type LoadComponentsReturnType = {
-  Component: any
-  pageConfig: PageConfig
-  unstable_getStaticProps?: (params: {
-    params: any
-  }) => {
-    props: any
-    revalidate?: number | boolean
-  }
-  unstable_getStaticPaths?: () => void
-  buildManifest?: any
-  reactLoadableManifest?: any
-  Document?: any
-  DocumentMiddleware?: any
-  App?: any
+  Component: React.ComponentType
+  pageConfig?: PageConfig
+  buildManifest: BuildManifest
+  reactLoadableManifest: ReactLoadableManifest
+  Document: DocumentType
+  App: AppType
+  getStaticProps?: GetStaticProps
+  getStaticPaths?: GetStaticPaths
+  getServerSideProps?: GetServerSideProps
 }
 
 export async function loadComponents(
   distDir: string,
-  buildId: string,
   pathname: string,
   serverless: boolean
 ): Promise<LoadComponentsReturnType> {
   if (serverless) {
     const Component = await requirePage(pathname, distDir, serverless)
+    let { getStaticProps, getStaticPaths, getServerSideProps } = Component
+
+    getStaticProps = await getStaticProps
+    getStaticPaths = await getStaticPaths
+    getServerSideProps = await getServerSideProps
+    const pageConfig = (await Component.config) || {}
+
     return {
       Component,
-      pageConfig: Component.config || {},
-      unstable_getStaticProps: Component.unstable_getStaticProps,
-      unstable_getStaticPaths: Component.unstable_getStaticPaths,
-    }
+      pageConfig,
+      getStaticProps,
+      getStaticPaths,
+      getServerSideProps,
+    } as LoadComponentsReturnType
   }
-  const documentPath = join(
-    distDir,
-    SERVER_DIRECTORY,
-    CLIENT_STATIC_FILES_PATH,
-    buildId,
-    'pages',
-    '_document'
-  )
-  const appPath = join(
-    distDir,
-    SERVER_DIRECTORY,
-    CLIENT_STATIC_FILES_PATH,
-    buildId,
-    'pages',
-    '_app'
-  )
 
-  const DocumentMod = require(documentPath)
-  const { middleware: DocumentMiddleware } = DocumentMod
-
-  const ComponentMod = requirePage(pathname, distDir, serverless)
+  const [DocumentMod, AppMod, ComponentMod] = await Promise.all([
+    requirePage('/_document', distDir, serverless),
+    requirePage('/_app', distDir, serverless),
+    requirePage(pathname, distDir, serverless),
+  ])
 
   const [
     buildManifest,
@@ -77,18 +74,20 @@ export async function loadComponents(
     require(join(distDir, REACT_LOADABLE_MANIFEST)),
     interopDefault(ComponentMod),
     interopDefault(DocumentMod),
-    interopDefault(require(appPath)),
+    interopDefault(AppMod),
   ])
+
+  const { getServerSideProps, getStaticProps, getStaticPaths } = ComponentMod
 
   return {
     App,
     Document,
     Component,
     buildManifest,
-    DocumentMiddleware,
     reactLoadableManifest,
     pageConfig: ComponentMod.config || {},
-    unstable_getStaticProps: ComponentMod.unstable_getStaticProps,
-    unstable_getStaticPaths: ComponentMod.unstable_getStaticPaths,
+    getServerSideProps,
+    getStaticProps,
+    getStaticPaths,
   }
 }

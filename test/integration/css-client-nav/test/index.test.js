@@ -1,19 +1,18 @@
 /* eslint-env jest */
-/* global jasmine */
-import { join } from 'path'
+
+import cheerio from 'cheerio'
 import { remove } from 'fs-extra'
 import {
-  nextBuild,
-  nextStart,
-  waitFor,
   findPort,
   killApp,
+  nextBuild,
+  nextStart,
   renderViaHTTP,
 } from 'next-test-utils'
-import cheerio from 'cheerio'
 import webdriver from 'next-webdriver'
+import { join } from 'path'
 
-jasmine.DEFAULT_TIMEOUT_INTERVAL = 1000 * 60 * 1
+jest.setTimeout(1000 * 60 * 1)
 
 const fixturesDir = join(__dirname, '../../css-fixtures')
 
@@ -80,31 +79,12 @@ describe('CSS Module client-side navigation in Production', () => {
     let browser
     try {
       browser = await webdriver(appPort, '/blue')
-
-      await waitFor(2000) // Ensure hydration
-
       await browser.eval(`window.__did_not_ssr = 'make sure this is set'`)
 
       const redColor = await browser.eval(
         `window.getComputedStyle(document.querySelector('#verify-blue')).color`
       )
       expect(redColor).toMatchInlineSnapshot(`"rgb(0, 0, 255)"`)
-
-      // Check that Red was preloaded
-      const result = await browser.eval(
-        `[].slice.call(document.querySelectorAll('link[rel="prefetch"][as="style"]')).map(e=>({href:e.href})).sort()`
-      )
-      expect(result.length).toBe(1)
-
-      // Check that CSS was not loaded as script
-      const cssPreloads = await browser.eval(
-        `[].slice.call(document.querySelectorAll('link[rel=preload][href*=".css"]')).map(e=>e.as)`
-      )
-      expect(cssPreloads.every(e => e === 'style')).toBe(true)
-      const cssPreloads2 = await browser.eval(
-        `[].slice.call(document.querySelectorAll('link[rel=prefetch][href*=".css"]')).map(e=>e.as)`
-      )
-      expect(cssPreloads2.every(e => e === 'style')).toBe(true)
 
       await browser.elementByCss('#link-red').click()
 

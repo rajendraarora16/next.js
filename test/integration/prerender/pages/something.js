@@ -2,8 +2,7 @@ import React from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 
-// eslint-disable-next-line camelcase
-export async function unstable_getStaticProps({ params }) {
+export async function getStaticProps({ params }) {
   return {
     props: {
       world: 'world',
@@ -20,7 +19,7 @@ export default ({ world, time, params, random }) => {
     <>
       <p>hello: {world}</p>
       <span>time: {time}</span>
-      <div>{random}</div>
+      <div id="random">{random}</div>
       <div id="params">{JSON.stringify(params)}</div>
       <div id="query">{JSON.stringify(useRouter().query)}</div>
       <Link href="/">

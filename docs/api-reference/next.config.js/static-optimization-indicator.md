@@ -1,4 +1,10 @@
+---
+description: Optimized pages include an indicator to let you know if it's being statically optimized. You can opt-out of it here.
+---
+
 # Static Optimization Indicator
+
+> **Note:** This indicator was removed in Next.js version 10.0.1. We recommend upgrading to the latest version of Next.js.
 
 When a page qualifies for [Automatic Static Optimization](/docs/advanced-features/automatic-static-optimization.md) we show an indicator to let you know.
 

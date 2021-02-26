@@ -8,10 +8,11 @@ if (process.env.BROWSERSTACK) {
     localIdentifier: new Date().getTime(), // Adding a unique local identifier to run parallel tests on BrowserStack
   }
   global.browserStackLocal = browserStackLocal
+  global.browserStackLocalId = localBrowserStackOpts.localIdentifier
 
   globalSetup = () => {
     return new Promise((resolve, reject) => {
-      browserStackLocal.start(localBrowserStackOpts, err => {
+      browserStackLocal.start(localBrowserStackOpts, (err) => {
         if (err) return reject(err)
         console.log('Started BrowserStackLocal', browserStackLocal.isRunning())
         resolve()

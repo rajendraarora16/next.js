@@ -1,3 +1,7 @@
+---
+description: Learn how AMP pages are created when used together with `next export`.
+---
+
 # AMP in Static HTML export
 
 When using `next export` to do [Static HTML export](/docs/advanced-features/static-html-export.md) statically prerender pages, Next.js will detect if the page supports AMP and change the exporting behavior based on that.
@@ -23,7 +27,7 @@ And the AMP version of your page will include a link to the HTML page:
 <link rel="canonical" href="/about" />
 ```
 
-When [`exportTrailingSlash`](/docs/api-reference/next.config.js/exportPathMap.md#0cf7d6666b394c5d8d08a16a933e86ea) is enabled the exported pages for `pages/about.js` would be:
+When [`trailingSlash`](/docs/api-reference/next.config.js/trailing-slash.md) is enabled the exported pages for `pages/about.js` would be:
 
 - `out/about/index.html` - HTML page
 - `out/about.amp/index.html` - AMP page

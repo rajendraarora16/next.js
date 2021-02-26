@@ -1,7 +1,7 @@
 {
   "root": true,
   "parser": "babel-eslint",
-  "plugins": ["react", "react-hooks"],
+  "plugins": ["react", "react-hooks", "jest", "import"],
   "env": {
     "browser": true,
     "commonjs": true,
@@ -18,9 +18,19 @@
   "settings": {
     "react": {
       "version": "detect"
-    }
+    },
+    "import/internal-regex": "^next/"
   },
   "overrides": [
+    {
+      "files": ["test/**/*.test.js"],
+      "extends": ["plugin:jest/recommended"],
+      "rules": {
+        "jest/expect-expect": "off",
+        "jest/no-disabled-tests": "off"
+      }
+    },
+    { "files": ["**/__tests__/**"], "env": { "jest": true } },
     {
       "files": ["**/*.ts", "**/*.tsx"],
       "parser": "@typescript-eslint/parser",
@@ -61,13 +71,69 @@
             "ignoreRestSiblings": true
           }
         ],
+        "no-unused-expressions": "off",
+        "@typescript-eslint/no-unused-expressions": [
+          "error",
+          {
+            "allowShortCircuit": true,
+            "allowTernary": true,
+            "allowTaggedTemplates": true
+          }
+        ],
         "no-useless-constructor": "off",
         "@typescript-eslint/no-useless-constructor": "warn"
       }
     },
     {
-      "files": ["test/**/*", "examples/**/*"],
+      "files": [
+        "test/**/*",
+        "examples/**/*",
+        "packages/create-next-app/templates/**/*"
+      ],
       "rules": { "react/react-in-jsx-scope": "off" }
+    },
+    {
+      "files": ["examples/**/*"],
+      "rules": {
+        "import/no-anonymous-default-export": [
+          "error",
+          {
+            // React components:
+            "allowArrowFunction": false,
+            "allowAnonymousClass": false,
+            "allowAnonymousFunction": false,
+
+            // Non-React stuff:
+            "allowArray": true,
+            "allowCallExpression": true,
+            "allowLiteral": true,
+            "allowObject": true
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/**"],
+      "rules": {
+        "no-shadow": ["warn", { "builtinGlobals": false }],
+        "import/no-extraneous-dependencies": [
+          "error",
+          { "devDependencies": false }
+        ]
+      }
+    },
+    {
+      "files": ["packages/**/*.tsx", "packages/**/*.ts"],
+      "rules": {
+        "@typescript-eslint/no-unused-vars": [
+          "warn",
+          {
+            "args": "all",
+            "argsIgnorePattern": "^_",
+            "ignoreRestSiblings": true
+          }
+        ]
+      }
     }
   ],
   "rules": {

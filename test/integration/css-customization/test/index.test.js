@@ -1,11 +1,11 @@
 /* eslint-env jest */
-/* global jasmine */
+
 import { join } from 'path'
 import { readdir, readFile, remove } from 'fs-extra'
 import { nextBuild } from 'next-test-utils'
 import escapeStringRegexp from 'escape-string-regexp'
 
-jasmine.DEFAULT_TIMEOUT_INTERVAL = 1000 * 60 * 1
+jest.setTimeout(1000 * 60 * 1)
 
 const fixturesDir = join(__dirname, '../..', 'css-fixtures')
 
@@ -16,15 +16,19 @@ describe('CSS Customization', () => {
     await remove(join(appDir, '.next'))
   })
 
-  it('should build successfully', async () => {
-    await nextBuild(appDir)
+  it('should compile successfully', async () => {
+    const { code, stdout } = await nextBuild(appDir, [], {
+      stdout: true,
+    })
+    expect(code).toBe(0)
+    expect(stdout).toMatch(/Compiled successfully/)
   })
 
   it(`should've compiled and prefixed`, async () => {
     const cssFolder = join(appDir, '.next/static/css')
 
     const files = await readdir(cssFolder)
-    const cssFiles = files.filter(f => /\.css$/.test(f))
+    const cssFiles = files.filter((f) => /\.css$/.test(f))
 
     expect(cssFiles.length).toBe(1)
     const cssContent = await readFile(join(cssFolder, cssFiles[0]), 'utf8')
@@ -40,7 +44,7 @@ describe('CSS Customization', () => {
     const cssFolder = join(appDir, '.next/static/css')
 
     const files = await readdir(cssFolder)
-    const cssMapFiles = files.filter(f => /\.css\.map$/.test(f))
+    const cssMapFiles = files.filter((f) => /\.css\.map$/.test(f))
 
     expect(cssMapFiles.length).toBe(1)
     const cssMapContent = (
@@ -71,6 +75,72 @@ describe('CSS Customization', () => {
   })
 })
 
+describe('Legacy Next-CSS Customization', () => {
+  const appDir = join(fixturesDir, 'custom-configuration-legacy')
+
+  beforeAll(async () => {
+    await remove(join(appDir, '.next'))
+  })
+
+  it('should compile successfully', async () => {
+    const { code, stdout, stderr } = await nextBuild(appDir, [], {
+      stdout: true,
+      stderr: true,
+    })
+    expect(code).toBe(0)
+    expect(stdout).toMatch(/Compiled successfully/)
+    expect(stderr).toMatch(
+      /Built-in CSS support is being disabled due to custom CSS configuration being detected/
+    )
+  })
+
+  it(`should've compiled and prefixed`, async () => {
+    const cssFolder = join(appDir, '.next/static/chunks')
+
+    const files = await readdir(cssFolder)
+    const cssFiles = files.filter((f) => /\.css$/.test(f))
+
+    expect(cssFiles.length).toBe(1)
+    const cssContent = await readFile(join(cssFolder, cssFiles[0]), 'utf8')
+    expect(cssContent.replace(/\/\*.*?\*\//g, '').trim()).toMatchInlineSnapshot(
+      `"@media (480px <= width < 768px){::placeholder{color:green}}.video{max-width:400px;max-height:300px}"`
+    )
+  })
+})
+
+describe('Custom CSS Customization via Webpack', () => {
+  const appDir = join(fixturesDir, 'custom-configuration-webpack')
+
+  beforeAll(async () => {
+    await remove(join(appDir, '.next'))
+  })
+
+  it('should compile successfully', async () => {
+    const { code, stdout, stderr } = await nextBuild(appDir, [], {
+      stdout: true,
+      stderr: true,
+    })
+    expect(code).toBe(0)
+    expect(stdout).toMatch(/Compiled successfully/)
+    expect(stderr).not.toMatch(
+      /Built-in CSS support is being disabled due to custom CSS configuration being detected/
+    )
+  })
+
+  it(`should've compiled and prefixed`, async () => {
+    const cssFolder = join(appDir, '.next/static/css')
+
+    const files = await readdir(cssFolder)
+    const cssFiles = files.filter((f) => /\.css$/.test(f))
+
+    expect(cssFiles.length).toBe(1)
+    const cssContent = await readFile(join(cssFolder, cssFiles[0]), 'utf8')
+    expect(cssContent.replace(/\/\*.*?\*\//g, '').trim()).toMatchInlineSnapshot(
+      `"@media (480px <= width < 768px){::placeholder{color:green}}.video{max-width:400px;max-height:300px}"`
+    )
+  })
+})
+
 describe('CSS Customization Array', () => {
   const appDir = join(fixturesDir, 'custom-configuration-arr')
 
@@ -78,15 +148,19 @@ describe('CSS Customization Array', () => {
     await remove(join(appDir, '.next'))
   })
 
-  it('should build successfully', async () => {
-    await nextBuild(appDir)
+  it('should compile successfully', async () => {
+    const { code, stdout } = await nextBuild(appDir, [], {
+      stdout: true,
+    })
+    expect(code).toBe(0)
+    expect(stdout).toMatch(/Compiled successfully/)
   })
 
   it(`should've compiled and prefixed`, async () => {
     const cssFolder = join(appDir, '.next/static/css')
 
     const files = await readdir(cssFolder)
-    const cssFiles = files.filter(f => /\.css$/.test(f))
+    const cssFiles = files.filter((f) => /\.css$/.test(f))
 
     expect(cssFiles.length).toBe(1)
     const cssContent = await readFile(join(cssFolder, cssFiles[0]), 'utf8')
@@ -102,7 +176,7 @@ describe('CSS Customization Array', () => {
     const cssFolder = join(appDir, '.next/static/css')
 
     const files = await readdir(cssFolder)
-    const cssMapFiles = files.filter(f => /\.css\.map$/.test(f))
+    const cssMapFiles = files.filter((f) => /\.css\.map$/.test(f))
 
     expect(cssMapFiles.length).toBe(1)
     const cssMapContent = (
@@ -143,9 +217,12 @@ describe('Bad CSS Customization', () => {
     await remove(join(appDir, '.next'))
   })
 
-  it('should build successfully', async () => {
-    const { stderr } = await nextBuild(appDir, [], { stderr: true })
-
+  it('should compile successfully', async () => {
+    const { stdout, stderr } = await nextBuild(appDir, [], {
+      stdout: true,
+      stderr: true,
+    })
+    expect(stdout).toMatch(/Compiled successfully/)
     expect(stderr).toMatch(/field which is not supported.*?sourceMap/)
     ;[
       'postcss-modules-values',
@@ -153,7 +230,7 @@ describe('Bad CSS Customization', () => {
       'postcss-modules-extract-imports',
       'postcss-modules-local-by-default',
       'postcss-modules',
-    ].forEach(plugin => {
+    ].forEach((plugin) => {
       expect(stderr).toMatch(
         new RegExp(`Please remove the.*?${escapeStringRegexp(plugin)}`)
       )
@@ -164,7 +241,7 @@ describe('Bad CSS Customization', () => {
     const cssFolder = join(appDir, '.next/static/css')
 
     const files = await readdir(cssFolder)
-    const cssFiles = files.filter(f => /\.css$/.test(f))
+    const cssFiles = files.filter((f) => /\.css$/.test(f))
 
     expect(cssFiles.length).toBe(1)
     const cssContent = await readFile(join(cssFolder, cssFiles[0]), 'utf8')
@@ -180,7 +257,7 @@ describe('Bad CSS Customization', () => {
     const cssFolder = join(appDir, '.next/static/css')
 
     const files = await readdir(cssFolder)
-    const cssMapFiles = files.filter(f => /\.css\.map$/.test(f))
+    const cssMapFiles = files.filter((f) => /\.css\.map$/.test(f))
 
     expect(cssMapFiles.length).toBe(1)
   })
@@ -301,6 +378,23 @@ describe('Bad CSS Customization Array (7)', () => {
 
     expect(stderr).toMatch(
       /A PostCSS Plugin was passed as an array but did not provide its configuration \('postcss-trolling'\)/
+    )
+    expect(stderr).toMatch(/Build error occurred/)
+  })
+})
+
+describe('Bad CSS Customization Array (8)', () => {
+  const appDir = join(fixturesDir, 'bad-custom-configuration-arr-8')
+
+  beforeAll(async () => {
+    await remove(join(appDir, '.next'))
+  })
+
+  it('should fail the build', async () => {
+    const { stderr } = await nextBuild(appDir, [], { stderr: true })
+
+    expect(stderr).toMatch(
+      /A PostCSS Plugin was passed as a function using require\(\), but it must be provided as a string/
     )
     expect(stderr).toMatch(/Build error occurred/)
   })

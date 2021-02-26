@@ -1,10 +1,13 @@
 import { IncomingMessage, ServerResponse } from 'http'
 import { ParsedUrlQuery } from 'querystring'
 import { ComponentType } from 'react'
-import { format, URLFormatOptions, UrlObject } from 'url'
-
-import { ManifestItem } from '../server/render'
+import { UrlObject } from 'url'
+import { formatUrl } from './router/utils/format-url'
+import { ManifestItem } from '../server/load-components'
 import { NextRouter } from './router/router'
+import { Env } from '@next/env'
+import { BuildManifest } from '../server/get-page-files'
+import { DomainLocales } from '../server/config'
 
 /**
  * Types used by both next and next-server
@@ -44,6 +47,18 @@ export type AppTreeType = ComponentType<
   AppInitialProps & { [name: string]: any }
 >
 
+/**
+ * Web vitals provided to _app.reportWebVitals by Core Web Vitals plugin developed by Google Chrome team.
+ * https://nextjs.org/blog/next-9-4#integrated-web-vitals-reporting
+ */
+export type NextWebVitalsMetric = {
+  id: string
+  label: string
+  name: string
+  startTime: number
+  value: number
+}
+
 export type Enhancer<C> = (Component: C) => C
 
 export type ComponentsEnhancer =
@@ -56,7 +71,6 @@ export type ComponentsEnhancer =
 export type RenderPageResult = {
   html: string
   head?: Array<JSX.Element | null>
-  dataOnly?: true
 }
 
 export type RenderPage = (
@@ -69,8 +83,7 @@ export type BaseContext = {
 }
 
 export type NEXT_DATA = {
-  dataManager: string
-  props: any
+  props: Record<string, any>
   page: string
   query: ParsedUrlQuery
   buildId: string
@@ -78,14 +91,24 @@ export type NEXT_DATA = {
   runtimeConfig?: { [key: string]: any }
   nextExport?: boolean
   autoExport?: boolean
+  isFallback?: boolean
   dynamicIds?: string[]
   err?: Error & { statusCode?: number }
+  gsp?: boolean
+  gssp?: boolean
+  customServer?: boolean
+  gip?: boolean
+  appGip?: boolean
+  locale?: string
+  locales?: string[]
+  defaultLocale?: string
+  domainLocales?: DomainLocales
+  isPreview?: boolean
 }
 
 /**
  * `Next` context
  */
-// tslint:disable-next-line interface-name
 export interface NextPageContext {
   /**
    * Error object if encountered during rendering
@@ -134,6 +157,8 @@ export type AppPropsType<
 > = AppInitialProps & {
   Component: NextComponentType<NextPageContext, any, P>
   router: R
+  __N_SSG?: boolean
+  __N_SSP?: boolean
 }
 
 export type DocumentContext = NextPageContext & {
@@ -147,27 +172,32 @@ export type DocumentInitialProps = RenderPageResult & {
 export type DocumentProps = DocumentInitialProps & {
   __NEXT_DATA__: NEXT_DATA
   dangerousAsPath: string
+  docComponentsRendered: {
+    Html?: boolean
+    Main?: boolean
+    Head?: boolean
+    NextScript?: boolean
+  }
+  buildManifest: BuildManifest
   ampPath: string
   inAmpMode: boolean
   hybridAmp: boolean
-  staticMarkup: boolean
   isDevelopment: boolean
-  hasCssMode: boolean
-  devFiles: string[]
-  files: string[]
-  polyfillFiles: string[]
   dynamicImports: ManifestItem[]
   assetPrefix?: string
   canonicalBase: string
-  htmlProps: any
-  bodyTags: any[]
   headTags: any[]
+  unstable_runtimeJS?: false
+  unstable_JsPreload?: false
+  devOnlyCacheBusterQueryString: string
+  scriptLoader: { defer?: string[]; eager?: any[] }
+  locale?: string
 }
 
 /**
  * Next `API` route request
  */
-export type NextApiRequest = IncomingMessage & {
+export interface NextApiRequest extends IncomingMessage {
   /**
    * Object of `query` values from url
    */
@@ -182,6 +212,14 @@ export type NextApiRequest = IncomingMessage & {
   }
 
   body: any
+
+  env: Env
+
+  preview?: boolean
+  /**
+   * Preview data set on the request, if any
+   * */
+  previewData?: any
 }
 
 /**
@@ -202,22 +240,51 @@ export type NextApiResponse<T = any> = ServerResponse & {
    */
   json: Send<T>
   status: (statusCode: number) => NextApiResponse<T>
+  redirect(url: string): NextApiResponse<T>
+  redirect(status: number, url: string): NextApiResponse<T>
+
+  /**
+   * Set preview data for Next.js' prerender mode
+   */
+  setPreviewData: (
+    data: object | string,
+    options?: {
+      /**
+       * Specifies the number (in seconds) for the preview session to last for.
+       * The given number will be converted to an integer by rounding down.
+       * By default, no maximum age is set and the preview session finishes
+       * when the client shuts down (browser is closed).
+       */
+      maxAge?: number
+    }
+  ) => NextApiResponse<T>
+  clearPreviewData: () => NextApiResponse<T>
 }
+
+/**
+ * Next `API` route handler
+ */
+export type NextApiHandler<T = any> = (
+  req: NextApiRequest,
+  res: NextApiResponse<T>
+) => void | Promise<void>
 
 /**
  * Utils
  */
-export function execOnce(this: any, fn: (...args: any) => any) {
+export function execOnce<T extends (...args: any[]) => ReturnType<T>>(
+  fn: T
+): T {
   let used = false
-  let result: any = null
+  let result: ReturnType<T>
 
-  return (...args: any) => {
+  return ((...args: any[]) => {
     if (!used) {
       used = true
-      result = fn.apply(this, args)
+      result = fn(...args)
     }
     return result
-  }
+  }) as T
 }
 
 export function getLocationOrigin() {
@@ -231,7 +298,7 @@ export function getURL() {
   return href.substring(origin.length)
 }
 
-export function getDisplayName(Component: ComponentType<any>) {
+export function getDisplayName<P>(Component: ComponentType<P>) {
   return typeof Component === 'string'
     ? Component
     : Component.displayName || Component.name || 'Unknown'
@@ -247,10 +314,10 @@ export async function loadGetInitialProps<
   P = {}
 >(App: NextComponentType<C, IP, P>, ctx: C): Promise<IP> {
   if (process.env.NODE_ENV !== 'production') {
-    if (App.prototype && App.prototype.getInitialProps) {
+    if (App.prototype?.getInitialProps) {
       const message = `"${getDisplayName(
         App
-      )}.getInitialProps()" is defined as an instance method - visit https://err.sh/zeit/next.js/get-initial-props-as-an-instance-method for more information.`
+      )}.getInitialProps()" is defined as an instance method - visit https://err.sh/vercel/next.js/get-initial-props-as-an-instance-method for more information.`
       throw new Error(message)
     }
   }
@@ -264,7 +331,7 @@ export async function loadGetInitialProps<
         pageProps: await loadGetInitialProps(ctx.Component, ctx.ctx),
       }
     }
-    return {} as any
+    return {} as IP
   }
 
   const props = await App.getInitialProps(ctx)
@@ -285,7 +352,7 @@ export async function loadGetInitialProps<
       console.warn(
         `${getDisplayName(
           App
-        )} returned an empty object from \`getInitialProps\`. This de-optimizes and prevents automatic static optimization. https://err.sh/zeit/next.js/empty-object-getInitialProps`
+        )} returned an empty object from \`getInitialProps\`. This de-optimizes and prevents automatic static optimization. https://err.sh/vercel/next.js/empty-object-getInitialProps`
       )
     }
   }
@@ -308,13 +375,10 @@ export const urlObjectKeys = [
   'slashes',
 ]
 
-export function formatWithValidation(
-  url: UrlObject,
-  options?: URLFormatOptions
-) {
+export function formatWithValidation(url: UrlObject): string {
   if (process.env.NODE_ENV === 'development') {
     if (url !== null && typeof url === 'object') {
-      Object.keys(url).forEach(key => {
+      Object.keys(url).forEach((key) => {
         if (urlObjectKeys.indexOf(key) === -1) {
           console.warn(
             `Unknown key passed via urlObject into url.format: ${key}`
@@ -324,11 +388,11 @@ export function formatWithValidation(
     }
   }
 
-  return format(url as any, options)
+  return formatUrl(url)
 }
 
-export const SUPPORTS_PERFORMANCE = typeof performance !== 'undefined'
-export const SUPPORTS_PERFORMANCE_USER_TIMING =
-  SUPPORTS_PERFORMANCE &&
+export const SP = typeof performance !== 'undefined'
+export const ST =
+  SP &&
   typeof performance.mark === 'function' &&
   typeof performance.measure === 'function'

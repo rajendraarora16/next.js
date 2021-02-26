@@ -1,3 +1,16 @@
+const { BLOG_URL } = process.env
+
 module.exports = {
-  target: 'serverless',
+  rewrites() {
+    return [
+      {
+        source: '/blog',
+        destination: `${BLOG_URL}/blog`,
+      },
+      {
+        source: '/blog/:path*',
+        destination: `${BLOG_URL}/blog/:path*`,
+      },
+    ]
+  },
 }

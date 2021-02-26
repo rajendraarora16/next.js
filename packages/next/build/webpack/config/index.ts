@@ -1,8 +1,8 @@
-import webpack from 'webpack'
+import { webpack } from 'next/dist/compiled/webpack/webpack'
+import { NextConfig } from '../../../next-server/server/config'
 import { base } from './blocks/base'
 import { css } from './blocks/css'
 import { ConfigurationContext, pipe } from './utils'
-import { experimentData } from './blocks/experiment-data'
 
 export async function build(
   config: webpack.Configuration,
@@ -11,15 +11,19 @@ export async function build(
     customAppFile,
     isDevelopment,
     isServer,
-    hasSupportCss,
-    hasExperimentalData,
+    assetPrefix,
+    sassOptions,
+    productionBrowserSourceMaps,
+    future,
   }: {
     rootDirectory: string
     customAppFile: string | null
     isDevelopment: boolean
     isServer: boolean
-    hasSupportCss: boolean
-    hasExperimentalData: boolean
+    assetPrefix: string
+    sassOptions: any
+    productionBrowserSourceMaps: boolean
+    future: NextConfig['future']
   }
 ): Promise<webpack.Configuration> {
   const ctx: ConfigurationContext = {
@@ -29,12 +33,16 @@ export async function build(
     isProduction: !isDevelopment,
     isServer,
     isClient: !isServer,
+    assetPrefix: assetPrefix
+      ? assetPrefix.endsWith('/')
+        ? assetPrefix.slice(0, -1)
+        : assetPrefix
+      : '',
+    sassOptions,
+    productionBrowserSourceMaps,
+    future,
   }
 
-  const fn = pipe(
-    base(ctx),
-    experimentData(hasExperimentalData, ctx),
-    css(hasSupportCss, ctx)
-  )
+  const fn = pipe(base(ctx), css(ctx))
   return fn(config)
 }
